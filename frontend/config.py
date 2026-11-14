@@ -15,8 +15,17 @@ USE_MOCK = os.getenv("USE_MOCK", "false").lower() == "true"
 # How often data is reloaded (seconds)
 REFRESH_SECONDS = 30
 
+# Live view: how often the clock moves one step forward while playing (seconds)
+LIVE_TICK_SECONDS = 2.0
+
 # Solar window: the hours we try to move flexible consumption into
 SOLAR_WINDOW = (11, 15)
+
+# A telemetry reading older than this is reported as stale instead of live
+STALE_AFTER_MINUTES = 60
+
+# Per-user database (accounts, onboarding answers, accepted recommendations)
+USER_DB = Path(os.getenv("USER_DB", Path(__file__).resolve().parent / "data" / "app.db"))
 
 # Prices (lei/kWh) for every savings estimate. They come from the ML pipeline
 # (ml_pipeline/ml/tariffs.py), so the questionnaire, the recommendations and the
@@ -32,35 +41,81 @@ except Exception:  # ml_pipeline missing or its dependencies not installed
 PRICE_BUY_LEI_KWH = RETAIL_LEI_KWH    # what a kWh from the grid costs the customer
 PRICE_SELL_LEI_KWH = FEED_IN_LEI_KWH  # what an exported kWh is worth to the prosumer
 
-# Fixed colours, so charts look the same everywhere. A warm, friendly palette:
-# sun is gold, home is light blue, battery is green, grid is lavender.
+# Data colours. One hue per concept, used by every chart, card and the flow
+# diagram, so a colour always means the same thing: amber is the sun, blue is
+# the house, emerald is storage, violet is the grid, cyan is energy leaving,
+# pink is money per kWh, rose is a fault or an expensive hour.
 COLORS = {
-    "solar": "#F5A524",
-    "consumption": "#4C8DF6",
-    "battery": "#22A96B",
-    "grid": "#9B7BEA",
-    "solar_window": "rgba(245, 165, 36, 0.13)",
-    "peak": "#FF7A6B",
-    "bar": "#3CC2A6",
-    "expected": "#A3AEBB",
+    "solar": "#F59E0B",
+    "consumption": "#2563EB",
+    "battery": "#059669",
+    "grid": "#7C3AED",
+    "export": "#0891B2",
+    "price": "#DB2777",
+    "peak": "#E11D48",
+    "bar": "#0D9488",
+    "forecast": "#8B5CF6",
+    "expected": "#94A3B8",
+    "solar_window": "rgba(245, 158, 11, 0.10)",
 }
 
-# Interface colours (backgrounds, text, cards), used by components/theme.py
+# A categorical ramp for anything that needs several colours at once (the
+# consumption breakdown, the appliance plan, multi-series charts). Ordered so
+# that neighbours stay distinguishable, and all at a similar depth so no single
+# bar shouts louder than the others.
+SERIES = ["#2563EB", "#F59E0B", "#0D9488", "#7C3AED", "#DB2777",
+          "#059669", "#EA580C", "#0891B2"]
+
+# Interface colours. The brand is green, with proper subtones - a pale mint for
+# tints, a mid green for buttons, a deep forest for text on green - so the frame
+# has depth instead of one flat colour. Each state keeps its own soft tint
+# (green ok, amber warn, rose danger, blue info, violet accent, teal cool) so
+# two components side by side are easy to tell apart.
 UI = {
-    "bg": "#FBF8F2",
+    "bg": "#DEEBE3",
     "card": "#FFFFFF",
-    "sidebar": "#EEF6F0",
-    "text": "#24323F",
-    "muted": "#6B7785",
-    "border": "#ECE6DA",
-    "grid": "#EFEBE3",
-    "primary": "#22A96B",
-    "primary_dark": "#17804F",
-    "primary_shadow": "rgba(34, 169, 107, 0.28)",
-    "hero_from": "#FFF1D2",
-    "hero_to": "#E2F5EA",
-    "pill_bg": "#E3F5EB",
-    "plan_bg": "#EAF7EF",
+    "surface": "#EAF3EE",
+    "sidebar": "#DFEAE4",
+    "text": "#0E2A22",
+    "muted": "#576B64",
+    "faint": "#8CA39B",
+    "border": "#DCE7E1",
+    "grid": "#EAF1ED",
+    "track": "#E4EDE8",
+    "primary": "#12A56F",
+    "primary_dark": "#0A7D56",
+    "primary_light": "#34C98D",
+    "primary_mint": "#D5F2E4",
+    "primary_soft": "#E4F6EC",
+    "primary_shadow": "rgba(18, 165, 111, 0.26)",
+    "ok": "#12A56F",
+    "ok_soft": "#E4F6EC",
+    "ok_dark": "#0A7D56",
+    "danger": "#E11D48",
+    "danger_soft": "#FDE7EC",
+    "danger_dark": "#A4133C",
+    "warn": "#E08600",
+    "warn_soft": "#FCF0DB",
+    "warn_dark": "#9A5B00",
+    "info": "#2563EB",
+    "info_soft": "#E7EFFE",
+    "info_dark": "#1D4ED8",
+    "accent": "#7C3AED",
+    "accent_soft": "#F1EBFE",
+    "accent_dark": "#5B21B6",
+    "cool": "#0891B2",
+    "cool_soft": "#E0F4F9",
+    "cool_dark": "#0B6E87",
+    "hero_from": "#072019",
+    "hero_mid": "#0C3D2C",
+    "hero_to": "#115E43",
+    "hero_text": "#FFFFFF",
+    "hero_sub": "rgba(255,255,255,.78)",
+    "hero_eyebrow": "#6EE7B7",
+    "pill_bg": "#E4F6EC",
+    "plan_bg": "#EFFAF4",
+    "shadow": "0 1px 2px rgba(14,42,34,.06), 0 12px 30px -14px rgba(14,42,34,.22)",
+    "shadow_lg": "0 2px 4px rgba(14,42,34,.05), 0 24px 48px -20px rgba(14,42,34,.24)",
 }
 
 SEVERITY_ORDER = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}

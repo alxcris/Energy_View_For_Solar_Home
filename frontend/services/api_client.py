@@ -45,6 +45,11 @@ def _raw_sites() -> list[dict]:
     return mock_data.get_sites()
 
 
+def backend_alive() -> bool:
+    """Public version of the health check, for the status strip."""
+    return _backend_alive()
+
+
 def data_source() -> str:
     """'api' or 'mock' - used by the banner, and by pages if they need it."""
     if not _backend_alive():
