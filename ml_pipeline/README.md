@@ -125,10 +125,17 @@ What the data says:
 All prices live in `ml/tariffs.py`, nowhere else.
 
 - **Fixed contract** (default): 1.30 lei/kWh, the PPC fixed-price household offer (final price incl. network tariffs and VAT is 1.29-1.37 lei/kWh depending on the distribution zone).
-- **Time-of-use contract** (`TimeOfUseTariff`): cheaper at night, all weekend and on legal holidays, like PPC Ore Smart+ (advertised from 0.98 lei/kWh). The hours and the peak price in the code are illustrative: take them from the customer's contract.
+- **Time-of-use contract** (`TimeOfUseTariff`): the PPC Ore Smart+ intervals (press release, 18 March 2026). Reduced price on weekday nights 00:00-05:59 all year, all weekend, and on weekday middays 11:00-14:59 from March to October. Reduced: from 0.98 lei/kWh final. Standard: ~1.55 lei/kWh, our estimate from the offer's active-energy prices (0.823 vs 0.348 lei/kWh) plus VAT; final prices depend on the distribution zone. Legal holidays are not in the offer.
+  Note the difference from the wholesale market (`ml/dispatch.py`): on the day-ahead market the evening is the most expensive time and midday solar hours can drop to zero or below. The retail offer makes late night and weekends cheap, plus midday in the sunny months.
 - **Exported kWh**: 0.30 lei/kWh. This is an assumption, replace it with the compensation price from the contract.
 
-`consumption_advice`, `habit_recommendations` and `plan_dispatch` take `tariff=` (a tariff object, a number in lei/kWh or nothing for the default). The best window is the cheapest one, not just the sunniest: grid energy at the tariff price plus own solar at the export price, compared with running the same appliance at the usual evening time. With a fixed price the sunniest window wins; with a time-of-use contract on a cloudy weekday the advice moves to the cheap evening hours instead.
+`consumption_advice`, `habit_recommendations` and `plan_dispatch` take `tariff=` (a tariff object, a number in lei/kWh or nothing for the default). The best window is the cheapest one, not just the sunniest: grid energy at the tariff price plus own solar at the export price, compared with running the same appliance at the usual evening time. With a fixed price the sunniest window wins. Appliances are only scheduled between 07:00 and 23:00 by default (`earliest_h`, `latest_h`). For a water heater or an EV on a timer, pass `earliest_h=0, latest_h=24`: on a cloudy weekday with Ore Smart+ the advice then moves to 00:00-02:00 at the reduced price.
+
+### Device schedule (smart plug, timer, delay start)
+
+`appliance_plan()` in `ml/advice.py` turns the forecast into a schedule for the customer's own devices: when to switch each one on and off, how to set it and the lei saved. Presets: electric car (3.7 kW wallbox, 4 h, any hour), water heater (2 kW, 2 h, any hour, on a smart plug or timer socket), dishwasher (delay start, any hour) and washing machine (delay start, 07:00-23:00 only). The biggest load gets the solar first and books it, so two devices never count the same kWh. A window is suggested only if it saves at least 5% of the usual cost. Phones, tablets and laptops are left out on purpose: a few cents a day.
+
+The platform only suggests: the customer sets the schedule. Nothing is sent to the devices, in line with the read-only constraint in `ml/connectors.py`. `run_demo.py` writes `out/schedule_<site>.ics` (calendar reminders, 10 minutes before each start), the dashboard shows the table and a download button.
 
 ## For the backend / dashboard
 
@@ -145,6 +152,7 @@ tips = consumption_advice(expected, telemetry, "S01")
 
 from ml.habits import detect_events, find_habits, habit_recommendations, peer_benchmark
 habits = find_habits(detect_events(telemetry, "S01"))   # learned from 28 days of load data
+plan = appliance_plan(expected, telemetry, "S01", tariff=TimeOfUseTariff())   # [{name, start_local, end_local, saving_lei, schedule, text}]
 nudges = habit_recommendations(habits, expected, telemetry, "S01")  # [{text, saving_lei_per_month, ...}]
 bench = peer_benchmark(telemetry, sites, "S01")         # evening share vs fleet median
 

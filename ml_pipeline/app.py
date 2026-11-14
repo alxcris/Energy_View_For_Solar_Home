@@ -120,9 +120,22 @@ with tab_cust:
         st.subheader("What to do differently")
         for n in info.get("nudges", []):
             st.info(n["text"])
-        for tip in info.get("tips", []):
-            st.write("- " + tip)
-        if not info.get("nudges") and not info.get("tips"):
+        devices = info.get("devices", [])
+        if devices:
+            st.markdown("**Your devices: when to switch them on**")
+            st.dataframe(pd.DataFrame(devices)[["name", "on", "off", "saving_lei", "how"]].rename(
+                columns={"name": "device", "on": "on", "off": "off", "saving_lei": "lei saved",
+                         "how": "how to set it"}), hide_index=True)
+            ics = OUT / f"schedule_{sid}.ics"
+            if ics.exists():
+                st.download_button("Add reminders to my calendar (.ics)", ics.read_bytes(),
+                                   file_name=f"solar_schedule_{sid}.ics", mime="text/calendar")
+            st.caption("You set these yourself (smart plug, timer, delay start, car app). "
+                       "The platform never switches your devices.")
+        else:
+            for tip in info.get("tips", []):
+                st.write("- " + tip)
+        if not info.get("nudges") and not info.get("tips") and not devices:
             st.write("Nothing to change tomorrow.")
         b = info.get("benchmark", {})
         if b.get("consent") is False:
