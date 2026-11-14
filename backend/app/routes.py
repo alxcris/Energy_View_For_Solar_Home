@@ -222,13 +222,6 @@ def get_recommendation_context(site_id: str, db: Session = Depends(get_db)):
             f"Consumul mediu observat intre orele 02:00 si 05:00 este {night_baseload_kw} kW. "
             "Verifica daca echipamentele necritice raman pornite in afara programului."
         )
-    if peak_month and lowest_month and lowest_month["total_mwh"] > 0:
-        actionable_suggestions.append(
-            f"Consumul a fost cel mai mare in {peak_month['month']} "
-            f"({peak_month['total_mwh']} MWh), de "
-            f"{round(peak_month['total_mwh'] / lowest_month['total_mwh'], 1)}x "
-            f"fata de {lowest_month['month']}."
-        )
 
     return {
         "site_id": site.site_id,
