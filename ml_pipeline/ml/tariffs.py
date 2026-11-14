@@ -2,8 +2,8 @@
 
 Two kinds of contract:
     FixedTariff      same price at every hour (most household contracts)
-    TimeOfUseTariff  cheaper at night, on weekends and on legal holidays (dynamic offers
-                     such as PPC Ore Smart+)
+    TimeOfUseTariff  reduced price in fixed hours: PPC Ore Smart+ by default (weekday
+                     nights, weekends, weekday midday from March to October)
 
 Every function that needs a price takes `tariff=`: a Tariff, a plain number (lei/kWh, treated
 as a fixed price) or None (the default fixed price below).
@@ -36,27 +36,51 @@ class FixedTariff:
 
 
 class TimeOfUseTariff:
-    """Off-peak at night, all weekend and on Romanian legal holidays, peak otherwise.
+    """Reduced price in fixed hourly intervals, peak price otherwise. Defaults follow the
+    PPC Ore Smart+ household offer (PPC press release, 18 March 2026):
+      - every weekday night, 00:00-05:59, all year
+      - all day Saturday and Sunday, all year
+      - weekday midday 11:00-14:59, March to October (the solar hours; same interval as
+        PPC Ore Smart and Ore Smart PRO)
+    Legal holidays are not in the offer, so they are off by default.
 
-    The defaults are ILLUSTRATIVE: PPC Ore Smart+ advertises final prices from 0.98 lei/kWh
-    with reduced prices at night and on weekends, but the exact hours and the peak price
-    must come from the customer's contract.
+    Prices are final prices (energy + network tariffs + VAT), and they depend on the
+    distribution zone:
+      - reduced: "from 0.98 lei/kWh" (PPC), active energy 0.348 lei/kWh
+      - standard: ESTIMATE. Active energy is 0.823 lei/kWh, 0.475 more than reduced;
+        with 21% VAT that is ~0.57 lei more, so ~1.55 lei/kWh final.
+    Intervals are [start, end) in local hours: (0, 6) means 00:00-05:59.
     """
 
-    def __init__(self, offpeak_lei_kwh: float = 0.98, peak_lei_kwh: float = 1.40,
-                 offpeak_from_h: int = 22, offpeak_to_h: int = 7, name: str = "time-of-use"):
+    def __init__(self, offpeak_lei_kwh: float = 0.98, peak_lei_kwh: float = 1.55,
+                 night=(0, 6), midday=(11, 15), midday_months=range(3, 11),
+                 weekend_offpeak: bool = True, holidays_offpeak: bool = False,
+                 name: str = "PPC Ore Smart+"):
         self.offpeak, self.peak = float(offpeak_lei_kwh), float(peak_lei_kwh)
-        self.from_h, self.to_h, self.name = offpeak_from_h, offpeak_to_h, name
+        self.night, self.midday, self.midday_months = night, midday, set(midday_months)
+        self.weekend_offpeak, self.holidays_offpeak, self.name = weekend_offpeak, holidays_offpeak, name
+
+    def offpeak_mask(self, times: pd.DatetimeIndex) -> np.ndarray:
+        local = pd.DatetimeIndex(times).tz_convert(TZ)
+        h = local.hour
+        mask = (h >= self.night[0]) & (h < self.night[1])
+        if self.midday:
+            in_season = np.isin(local.month, list(self.midday_months))
+            mask |= in_season & (h >= self.midday[0]) & (h < self.midday[1])
+        if self.weekend_offpeak:
+            mask |= local.dayofweek >= 5
+        if self.holidays_offpeak:
+            mask |= np.array([is_holiday(d) for d in local.date], dtype=bool)
+        return np.asarray(mask)
 
     def price(self, times: pd.DatetimeIndex) -> np.ndarray:
-        local = pd.DatetimeIndex(times).tz_convert(TZ)
-        night = (local.hour >= self.from_h) | (local.hour < self.to_h)
-        offday = (local.dayofweek >= 5) | np.array([is_holiday(d) for d in local.date], dtype=bool)
-        return np.where(night | offday, self.offpeak, self.peak)
+        return np.where(self.offpeak_mask(times), self.offpeak, self.peak)
 
     def __repr__(self):
-        return (f"TimeOfUseTariff(off-peak {self.offpeak:.2f}, peak {self.peak:.2f} lei/kWh, "
-                f"off-peak {self.from_h:02d}:00-{self.to_h:02d}:00 + weekends/holidays)")
+        return (f"{self.name}: reduced {self.offpeak:.2f} lei/kWh (weekday nights "
+                f"{self.night[0]:02d}:00-{self.night[1] - 1:02d}:59, weekends, weekday "
+                f"{self.midday[0]:02d}:00-{self.midday[1] - 1:02d}:59 Mar-Oct), "
+                f"otherwise {self.peak:.2f}")
 
 
 def as_tariff(t=None):

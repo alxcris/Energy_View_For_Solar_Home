@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ml.advice import consumption_advice
+from ml.advice import appliance_plan, consumption_advice, schedule_ics
 from ml.anomalies import Config, detect_alerts
 import json
 
@@ -117,6 +117,11 @@ def main():
     for a in consumption_advice(expected, telemetry, "S01", tariff=tariff):
         print("  " + a["text"])
 
+    print("\nDevice schedule for S01 (customer sets it: smart plug, timer, delay start, car app):")
+    devices = appliance_plan(expected, telemetry, "S01", tariff=tariff)
+    for d in devices:
+        print("  " + d["text"])
+
     print("\nHabits learned from S01's load data (last 28 days):")
     habits = find_habits(detect_events(telemetry, "S01"))
     print(habits.to_string(index=False) if len(habits) else "  none found")
@@ -173,6 +178,8 @@ def main():
         hb = find_habits(detect_events(telemetry, sid))
         nudges = habit_recommendations(hb, expected, telemetry, sid, tariff=tariff)
         tips = consumption_advice(expected, telemetry, sid, tariff=tariff)
+        devices = appliance_plan(expected, telemetry, sid, tariff=tariff)
+        (out / f"schedule_{sid}.ics").write_text(schedule_ics(devices, sid))   # phone reminders
         b = peer_benchmark(telemetry, sites, sid)
         dp = plan_dispatch(expected, telemetry, sites, sid, tariff=tariff)
         if len(dp["plan"]):
@@ -181,6 +188,9 @@ def main():
             "habits": hb.to_dict("records"),
             "nudges": [{k: str(v) if k.endswith("local") else v for k, v in n.items()} for n in nudges],
             "tips": [t["text"] for t in tips],
+            "devices": [{"name": d["name"], "on": f"{d['start_local']:%a %H:%M}", "off": f"{d['end_local']:%H:%M}",
+                         "saving_lei": d["saving_lei"], "reason": d["reason"], "how": d["schedule"]["how"],
+                         "text": d["text"]} for d in devices],
             "benchmark": b,
             "dispatch_uplift_lei": dp["uplift_lei"],
             "dispatch_texts": dp["texts"],
