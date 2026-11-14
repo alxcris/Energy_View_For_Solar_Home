@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -8,6 +11,22 @@ from app.schemas import RecommendationResponse
 router = APIRouter(prefix="/api/v1", tags=["Energy Recommendations"])
 
 AI_ADVISOR_URL = "http://127.0.0.1:8001/recommend"
+# what the ML pipeline computed per site (nudges in lei, best window, battery plan)
+ML_CUSTOMER_JSON = Path(__file__).resolve().parents[2] / "ml_pipeline" / "out" / "customer.json"
+
+
+def _fallback_recommendations(site_id: str, site_context: dict) -> list:
+    """Used when the AI advisor is down: ML nudges first, then the rule-based suggestions."""
+    recs = []
+    if ML_CUSTOMER_JSON.exists():
+        info = json.loads(ML_CUSTOMER_JSON.read_text()).get(site_id, {})
+        recs += [n["text"] for n in info.get("nudges", [])]
+        recs += info.get("tips", [])
+        recs += info.get("dispatch_texts", [])
+        if info.get("benchmark", {}).get("text"):
+            recs.append(info["benchmark"]["text"])
+    recs += site_context.get("actionable_suggestions", [])
+    return [r for r in recs if isinstance(r, str) and r.strip()]
 
 @router.get("/sites/{site_id}/recommendations", response_model=RecommendationResponse)
 async def get_energy_recommendations(site_id: str, db: Session = Depends(get_db)):
@@ -19,11 +38,19 @@ async def get_energy_recommendations(site_id: str, db: Session = Depends(get_db)
             resp.raise_for_status()
             ai_response = resp.json()
     except httpx.HTTPStatusError as exc:
+        fallback = _fallback_recommendations(site_id, site_context)
+        if fallback:
+            return RecommendationResponse(site_id=site_id, recommendations=fallback,
+                                          summary_data={**site_context, "source": "ml_fallback"})
         raise HTTPException(
             status_code=502,
             detail="Serviciul de recomandari a raspuns cu o eroare.",
         ) from exc
     except httpx.RequestError as exc:
+        fallback = _fallback_recommendations(site_id, site_context)
+        if fallback:
+            return RecommendationResponse(site_id=site_id, recommendations=fallback,
+                                          summary_data={**site_context, "source": "ml_fallback"})
         raise HTTPException(
             status_code=503,
             detail="Serviciul de recomandari nu este disponibil momentan.",
