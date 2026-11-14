@@ -20,18 +20,17 @@ def parse_bucharest_intervals(start_series: pd.Series, end_series: pd.Series) ->
     start_naive = pd.to_datetime(start_series)
     end_naive = pd.to_datetime(end_series)
 
-    # start_time conține ambele serii complete (03:00..03:45 x 2), deci ambiguous="infer" funcționează sigur
     start_aware = start_naive.dt.tz_localize(
         "Europe/Bucharest",
         ambiguous="infer",
         nonexistent="shift_forward",
     )
 
-    # Calculăm end_time adăugând durata reală a intervalului (în UTC/secunde) peste start_aware
-    # Astfel 03:45+03:00 + 15 min devine automat 03:00+02:00 (sau 04:00+03:00 dacă așa e în Excel)
+    # Calculate end_time by adding the actual interval duration (in UTC/seconds) to start_aware
+    # Thus 03:45+03:00 + 15 min automatically becomes 03:00+02:00 (or 04:00+03:00 if that is how it appears in Excel)
     duration = end_naive - start_naive
-    # Dacă în Excel intervalul 03:45 -> 04:00 are end_time 04:00:00 (duration = 15 min),
-    # iar pentru ora a doua 03:45 -> 04:00 (duration = 15 min), verificăm dacă end_naive e ambiguu:
+   # If in Excel the 03:45 -> 04:00 interval has end_time 04:00:00 (duration = 15 min),
+   # and for the second hour 03:45 -> 04:00 (duration = 15 min), we check whether end_naive is ambiguous:
     is_dst = start_aware.map(lambda x: bool(x.dst())).to_numpy()
 
     end_aware = end_naive.dt.tz_localize(
