@@ -1,96 +1,75 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
-from app.database import get_db, Site, LoadCurve15Min, Alert
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-router = APIRouter(prefix="/api/v1", tags=["Energy, Analytics & Chatbot"])
+DATABASE_URL = "sqlite:///./solar_energy.db"
 
-@router.get("/sites")
-def get_sites(db: Session = Depends(get_db)):
-    return db.query(Site).all()
-
-@router.get("/alerts")
-def get_alerts(db: Session = Depends(get_db)):
-    return db.query(Alert).filter(Alert.resolved == 0).all()
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
 
-@router.get("/sites/{site_id}/hourly-profile")
-def get_hourly_profile(site_id: str, db: Session = Depends(get_db)):
-    """Profilul mediu orar (0-23) calculat din curba de sarcina la 15 min."""
-    rows = (
-        db.query(
-            extract("hour", LoadCurve15Min.start_time).label("hour"),
-            func.avg(LoadCurve15Min.avg_power_mw).label("avg_mw"),
-        )
-        .filter(LoadCurve15Min.site_id == site_id)
-        .group_by("hour")
-        .order_by("hour")
-        .all()
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Nu exista curba de sarcina pentru acest site.")
+class Site(Base):
+    __tablename__ = "sites"
 
-    return [
-        {
-            "hour": int(r.hour),
-            "avg_power_mw": round(r.avg_mw, 4),
-            "avg_power_kw": round(r.avg_mw * 1000, 2),
-        }
-        for r in rows
-    ]
+    site_id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    sla_availability_pct = Column(Float, default=96.0)
+    status = Column(String, default="OK")  # OK, WARNING, CRITICAL
+
+    # Relatie 1-la-N: un site are mai multe invertoare
+    inverters = relationship("Inverter", back_populates="site", cascade="all, delete-orphan")
 
 
-@router.get("/sites/{site_id}/monthly-summary")
-def get_monthly_summary(site_id: str, db: Session = Depends(get_db)):
-    """Agregare lunara (MWh) pentru graficele de istoric / Year-over-Year."""
-    rows = (
-        db.query(
-            func.strftime("%Y-%m", LoadCurve15Min.start_time).label("month"),
-            func.sum(LoadCurve15Min.energy_mwh).label("total_mwh"),
-        )
-        .filter(LoadCurve15Min.site_id == site_id)
-        .group_by("month")
-        .order_by("month")
-        .all()
-    )
-    return [{"month": r.month, "total_mwh": round(r.total_mwh, 3)} for r in rows]
+class Inverter(Base):
+    __tablename__ = "inverters"
+
+    inverter_id = Column(String, primary_key=True, index=True)
+    site_id = Column(String, ForeignKey("sites.site_id"), index=True, nullable=False)
+    name = Column(String, nullable=False)          # ex: "Invertor Hala Est"
+    brand = Column(String, nullable=False)         # Huawei, Fronius, SMA
+    rated_power_kw = Column(Float, nullable=False) # Capacitatea instalata (kW)
+    current_power_kw = Column(Float, default=0.0)
+    expected_power_kw = Column(Float, default=0.0)
+    status = Column(String, default="OK")          # OK, WARNING, CRITICAL
+    # Parametri optionali (pot fi None daca producatorul nu ii expune)
+    battery_soc_pct = Column(Float, nullable=True)
+    gsm_signal_dbm = Column(Integer, nullable=True)
+
+    site = relationship("Site", back_populates="inverters")
 
 
-@router.get("/sites/{site_id}/ai-context")
-def get_chatbot_context(site_id: str, db: Session = Depends(get_db)):
-    """
-    Endpoint dedicat Chatbot-ului AI: extrage automat varfurile de consum,
-    ferestrele optime de consum (surplus solar) si alertele active din SQLite.
-    """
-    site = db.query(Site).filter_by(site_id=site_id).first()
-    if not site:
-        raise HTTPException(status_code=404, detail="Site not found")
+class LoadCurve15Min(Base):
+    __tablename__ = "load_curves"
 
-    hourly = get_hourly_profile(site_id, db)
-    daytime = [h for h in hourly if 8 <= h["hour"] <= 18]
-    best_solar_window = min(daytime, key=lambda x: x["avg_power_kw"]) if daytime else None
-    peak_hour = max(hourly, key=lambda x: x["avg_power_kw"]) if hourly else None
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    site_id = Column(String, ForeignKey("sites.site_id"), index=True, nullable=False)
+    start_time = Column(DateTime, index=True, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    interval_no = Column(Integer, nullable=False)
+    energy_mwh = Column(Float, nullable=False)
+    avg_power_mw = Column(Float, nullable=False)
+    observatii = Column(String, nullable=True)
 
-    total_mwh = (
-        db.query(func.sum(LoadCurve15Min.energy_mwh))
-        .filter(LoadCurve15Min.site_id == site_id)
-        .scalar()
-        or 0.0
-    )
-    active_alerts = db.query(Alert).filter_by(site_id=site_id, resolved=0).all()
 
-    return {
-        "site_name": site.name,
-        "inverter_brand": site.brand,
-        "sla_availability_pct": site.sla_availability_pct,
-        "total_annual_consumption_mwh": round(total_mwh, 2),
-        "peak_consumption_hour": peak_hour,
-        "best_hour_to_shift_load": best_solar_window,
-        "active_alerts": [a.message for a in active_alerts],
-        "recommendation_hint": (
-            f"Consumul scade la {best_solar_window['avg_power_kw']} kW in jurul orei "
-            f"{best_solar_window['hour']}:00 — moment optim pentru a porni consumatori mari pe energie solara."
-            if best_solar_window
-            else ""
-        ),
-    }
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    alert_id = Column(String, primary_key=True, index=True)
+    site_id = Column(String, ForeignKey("sites.site_id"), index=True, nullable=False)
+    inverter_id = Column(String, ForeignKey("inverters.inverter_id"), nullable=True)
+    severity = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    estimated_loss_kwh = Column(Float, default=0.0)
+    resolved = Column(Integer, default=0)
+
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
