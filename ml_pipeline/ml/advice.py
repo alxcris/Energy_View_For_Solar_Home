@@ -34,35 +34,37 @@ def load_forecast(telemetry: pd.DataFrame, site_id: str, future_times: pd.Dateti
 #top = maximum number of recommandations (2 for normal people used to their habits)
 #tariff = None for the case where it isn't mentioned
 #feed_in_lei_kwh = the price with which the user sells the produced current
+#appliance_kw = the average of the power used for the appliance in question
 def consumption_advice(expected: pd.DataFrame, telemetry: pd.DataFrame, site_id: str,
                        hours: int = 48, window_h: float = 2.0, top: int = 2,
                        tariff=None, feed_in_lei_kwh: float = FEED_IN_LEI_KWH,
                        appliance_kw: float = 1.0, usual_start_h: float = 19.0,
                        earliest_h: float = 7.0, latest_h: float = 23.0,
                        min_saving_lei: float = 0.1):
-    """Cheapest time to run one heavy appliance (`appliance_kw` for `window_h` hours),
-    at most one window per day.
-
-    Cost of a window = grid energy x tariff price + own solar used x feed-in price
-    (solar you use is solar you don't sell). The saving is measured against running
-    the same appliance at the household's usual time (`usual_start_h`) on grid power.
-    With a fixed tariff the winner is the sunniest window; with a time-of-use tariff a
-    cheap evening or weekend slot can beat a weak winter sun.
-    """
+    """Cheapest time to run one heavy appliance. Cost of a window = grid energy x tariff price + own solar 
+    used x feed-in price"""
+    #verifis if tariff is a real value
     tariff = as_tariff(tariff)
     now = telemetry[telemetry.site_id == site_id].timestamp.max()
     fut = expected[(expected.site_id == site_id) & (expected.timestamp > now)
                    & (expected.timestamp <= now + pd.Timedelta(hours=hours))].sort_values("timestamp")
+    #an hour has 4 15 min
     w = int(window_h * 4)
+    #if there isn't enough data about the future, the program stops
     if len(fut) < w:
         return []
     t = pd.DatetimeIndex(fut.timestamp)
+    #dt = 15/60 = 0,25 hours
     dt = 0.25
     surplus_kw = np.clip(fut.expected_kw.values - load_forecast(telemetry, site_id, t), 0, None)
-    solar_kw = np.minimum(surplus_kw, appliance_kw)          # part of the run your panels cover
+    #calculates how much of the power of the appliance is covered by the solar pannel
+    solar_kw = np.minimum(surplus_kw, appliance_kw)      
+    #how much does a one Kwh will cost in the future    
     price = tariff.price(t)
     slot_cost = ((appliance_kw - solar_kw) * price + solar_kw * feed_in_lei_kwh) * dt
+    #ones is the frame that helps understand the way the code runs
     ones = np.ones(w)
+    #convolve moves the frame
     cost = np.convolve(slot_cost, ones, mode="valid")
     solar_kwh = np.convolve(solar_kw * dt, ones, mode="valid")
     surplus_kwh = np.convolve(surplus_kw * dt, ones, mode="valid")
