@@ -13,9 +13,9 @@ DEFAULT_SITE_ID = "SITE-01"
 
 def parse_bucharest_intervals(start_series: pd.Series, end_series: pd.Series) -> tuple[pd.Series, pd.Series]:
     """
-    Parsează intervalele de 15 minute și tratează ora dublă de la trecerea la ora de iarnă
-    (ultima duminică din octombrie, ex. 26 octombrie 2025).
-    Folosește start_time pentru a deduce fusul orar (+03:00 vs +02:00) și îl aplică consistent și pe end_time.
+    Parse 15-minute intervals and handle the duplicate hour during the fall-back daylight saving time transition
+    (last Sunday of October, e.g., October 26, 2025).
+    Uses start_time to infer the timezone offset (+03:00 vs +02:00) and applies it consistently to end_time.
     """
     start_naive = pd.to_datetime(start_series)
     end_naive = pd.to_datetime(end_series)
