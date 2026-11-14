@@ -1,11 +1,12 @@
 [theme]
 base = "light"
-primaryColor = "#22A96B"
-backgroundColor = "#FBF8F2"
-secondaryBackgroundColor = "#EEF6F0"
-textColor = "#24323F"
+primaryColor = "#0E9F6E"
+backgroundColor = "#F4F6F9"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0F1C2E"
 baseRadius = "large"
-borderColor = "#E6E1D6"
+borderColor = "#E2E8F0"
+font = "sans-serif"
 
 [server]
 runOnSave = true
