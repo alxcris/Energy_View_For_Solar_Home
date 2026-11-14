@@ -20,20 +20,42 @@ html, body, [class*="css"], .stMarkdown, .stText, button, input, textarea, selec
     font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif !important;
 }}
 .stApp {{ background: {UI['bg']}; }}
-header[data-testid="stHeader"] {{ background: transparent; }}
-#MainMenu, footer, [data-testid="stAppDeployButton"] {{ visibility: hidden; }}
-/* The main page shows up in the menu as "app" (its file name): rename it */
-[data-testid="stSidebarNav"] span[label="app"] p {{ font-size: 0; }}
-[data-testid="stSidebarNav"] span[label="app"] p::after {{ content: "Home"; font-size: .95rem; }}
-.block-container {{ padding-top: 2rem; padding-bottom: 3rem; max-width: 1240px; }}
+#MainMenu, footer, [data-testid="stAppDeployButton"], [data-testid="stStatusWidget"] {{ display: none !important; }}
+
+/* Top bar: white, full width, logo left, navigation next to it */
+header[data-testid="stHeader"] {{
+    background: {UI['card']}; border-bottom: 1px solid {UI['border']};
+    box-shadow: 0 1px 8px rgba(36,50,63,.04); height: 4rem;
+}}
+header[data-testid="stHeader"] img[data-testid="stHeaderLogo"],
+[data-testid="stHeaderLogo"] {{ height: 2.1rem !important; max-height: 2.1rem !important; }}
+/* navigation links in the top bar */
+header[data-testid="stHeader"] a[data-testid="stTopNavLink"],
+header[data-testid="stHeader"] [data-testid="stTopNavLinkContainer"] a {{
+    border-radius: 999px; padding: .35rem .9rem; font-weight: 700; color: {UI['muted']};
+}}
+header[data-testid="stHeader"] a[data-testid="stTopNavLink"]:hover {{ background: {UI['pill_bg']}; color: {UI['text']}; }}
+header[data-testid="stHeader"] a[data-testid="stTopNavLink"][aria-current="page"],
+header[data-testid="stHeader"] a[data-testid="stTopNavLink"].active {{ background: {UI['pill_bg']}; color: {UI['primary_dark']}; }}
+.block-container {{ padding-top: 5.5rem; padding-bottom: 2rem; max-width: 1240px; }}
+
+/* Data-source chip */
+.ev-chip {{ display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
+            background: {UI['card']}; border: 1px solid {UI['border']}; font-size: .88rem; font-weight: 700;
+            color: {UI['text']}; margin-bottom: 15px; }}
+.ev-chip i {{ width: 8px; height: 8px; border-radius: 50%; background: var(--dot); display: inline-block; }}
+.ev-chip span {{ color: {UI['muted']}; font-weight: 600; }}
+
+/* Footer */
+.ev-footer {{ max-width: 1240px; margin: 36px auto 0; padding: 18px 0 6px; border-top: 1px solid {UI['border']};
+              display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+              color: {UI['muted']}; font-size: .85rem; }}
+.ev-footer b {{ color: {UI['text']}; }}
 
 h1, h2, h3 {{ color: {UI['text']}; font-weight: 800 !important; letter-spacing: -0.01em; }}
 h3 {{ font-size: 1.25rem !important; margin-top: 0.6rem; }}
 [data-testid="stCaptionContainer"] {{ color: {UI['muted']}; }}
 
-/* Sidebar */
-[data-testid="stSidebar"] {{ background: {UI['sidebar']}; border-right: 1px solid {UI['border']}; }}
-[data-testid="stSidebarNav"] a {{ border-radius: 12px; }}
 
 /* Rounded buttons */
 .stButton > button, .stPageLink a {{
@@ -69,7 +91,7 @@ div[data-testid="stVerticalBlock"][class*="border"] {{
 /* Hero */
 .ev-hero {{
     background: linear-gradient(120deg, {UI['hero_from']} 0%, {UI['hero_to']} 100%);
-    border-radius: 24px; padding: 26px 30px; margin-bottom: 18px;
+    border-radius: 24px; padding: 26px 30px; margin: 10px 0 18px;
     border: 1px solid {UI['border']};
 }}
 .ev-eyebrow {{ font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
@@ -128,7 +150,7 @@ def _register_plotly_template() -> None:
 
 
 def setup_page(title: str) -> None:
-    """Configures the page and applies the theme. Must be the first Streamlit call on a page."""
+    """Configures the page and applies the theme. Call it first on every page."""
     st.set_page_config(page_title=f"{title} | One Energy View", layout="wide")
     st.markdown(_CSS, unsafe_allow_html=True)
     _register_plotly_template()
@@ -157,3 +179,22 @@ def kpi_row(items: list[dict]) -> None:
             f'<div class="ev-kpi-value">{html.escape(str(it["value"]))}{unit}</div>{sub}</div>'
         )
     st.markdown(f'<div class="ev-kpi-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
+
+
+def footer() -> None:
+    """One line at the bottom of every page: what this is and where the data comes from."""
+    st.markdown(
+        '<div class="ev-footer"><span><b>One Energy View</b> &middot; production, consumption '
+        'and storage in one place</span><span>Chief Bit &middot; AI Validation Bootcamp &middot; '
+        'Challenge 1 by PPC</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def source_chip(use_ml: bool) -> str:
+    """Small pill saying where the numbers on the page come from."""
+    if use_ml:
+        return ('<div class="ev-chip" style="--dot:#22A96B"><i></i>ML pipeline data'
+                '<span>&middot; expected production, alerts and tips</span></div>')
+    return ('<div class="ev-chip" style="--dot:#F5A524"><i></i>Demo data'
+            '<span>&middot; run the ML pipeline for real results</span></div>')
