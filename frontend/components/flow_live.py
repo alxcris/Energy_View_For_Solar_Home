@@ -358,7 +358,7 @@ function render(i) {
     pillFor('car', Math.abs(carKw), C.bar);
     $('v-car').textContent = carSoc.toFixed(0);
     $('s-car').textContent = carKw > MIN ? 'charging from your surplus'
-      : carKw < -MIN ? 'powering your home (V2H)' : 'parked, ' + carSoc.toFixed(0) + '% charged';
+      : carKw < -MIN ? 'V2H to home' : 'parked, ' + carSoc.toFixed(0) + '% charged';
     $('node-car').setAttribute('opacity', Math.abs(carKw) >= MIN ? '1' : '.7');
   } else if (carG) {
     carG.style.display = 'none';

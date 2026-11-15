@@ -53,6 +53,14 @@ kpi_row([
      "unit": "lei/month", "color": "price"},
 ])
 
+
+def _consumer_with_count(key: str, profile: dict) -> str:
+    """Appliance label followed by (x N) when the home has more than one."""
+    label = APPLIANCES.get(key, key)
+    count = int((profile.get("appliance_counts") or {}).get(key, 1))
+    return f"{label} (x{count})" if count > 1 else label
+
+
 left, right = st.columns(2)
 
 with left:
@@ -61,7 +69,7 @@ with left:
         st.info("You have not finished the questionnaire yet.")
     rows = [
         ("Equipment", ", ".join(profile.get("equipment") or []) or "-"),
-        ("Big consumers", ", ".join(APPLIANCES.get(a, a) for a in profile.get("appliances") or []) or "-"),
+        ("Big consumers", ", ".join(_consumer_with_count(a, profile) for a in profile.get("appliances") or []) or "-"),
         ("Daily schedule", profile.get("schedule") or "-"),
         ("How involved", profile.get("engagement") or "-"),
         ("Smart meter data", "shared" if profile.get("data_meter") else "not shared"),
