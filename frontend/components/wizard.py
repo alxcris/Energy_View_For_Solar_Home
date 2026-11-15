@@ -129,10 +129,6 @@ EV_NOON = ["Usually yes", "Only at weekends", "Rarely"]
 INFRASTRUCTURE = ["Solar panels", "Battery", "Charging station (wallbox)",
                   "Smart meter", "Smart plugs"]
 
-# Household items shown on step 2 even when nothing was ticked in step 1,
-# because most homes have them.
-STANDARD_HOUSEHOLD = ["washer", "dishwasher", "dryer", "oven"]
-
 # How many of each big consumer the home has (ev, washer, dishwasher, dryer,
 # heat pump / AC, electric water heater). Count defaults to 1.
 COUNTABLE = {"ev", "washer", "dishwasher", "dryer", "heatpump", "boiler"}
@@ -278,14 +274,15 @@ def run_wizard() -> None:
         st.caption("Only the ones you ticked on the previous step, plus the household "
                    "basics everyone has. If several of the same, pick a number.")
 
-        # Only offer the appliances the user said they have on step 1, plus the
-        # household basics - no mismatch between the two pages, and no "pool"
-        # offered here if nothing was ticked there.
+        # Only offer the appliances the user said they have on step 1. No
+        # extras, no "every home has a dishwasher" assumption: if the user
+        # does not have it, it does not appear here.
         have_keys = [_LABEL_TO_KEY[label] for label in p.get("equipment") or []
                      if label in _LABEL_TO_KEY]
-        offered_keys = list(dict.fromkeys(have_keys + STANDARD_HOUSEHOLD))
+        offered_keys = list(dict.fromkeys(have_keys))
         if not offered_keys:
-            st.info("Pick what you have on the previous step first, then come back.")
+            st.info("You did not tick any consumers on the previous step. "
+                    "Go back and pick what you have, or skip this step.")
             _nav()
             return
         offered_labels = [APPLIANCES[k] for k in offered_keys]
