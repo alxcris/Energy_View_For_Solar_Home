@@ -52,8 +52,19 @@ def _read_sites(stamp: float) -> pd.DataFrame:
     return pd.read_csv(_out_dir() / "sites.csv")
 
 
+# Inverter brand per installation. Same cycling as backend/app/db/seed_from_ml.py,
+# so the fleet looks multi-vendor (Huawei, Fronius, SMA) wherever the brand is shown.
+BRANDS = ["Huawei", "Fronius", "SMA"]
+
+
+def _with_brand(sites: pd.DataFrame) -> pd.DataFrame:
+    sites = sites.copy()
+    sites["brand"] = [BRANDS[i % len(BRANDS)] for i in range(len(sites))]
+    return sites
+
+
 def get_sites() -> pd.DataFrame:
-    return fleet.expand(_read_sites(_stamp("sites.csv")))
+    return fleet.expand(_with_brand(_read_sites(_stamp("sites.csv"))))
 
 
 @st.cache_data(show_spinner=False)
@@ -120,7 +131,9 @@ def _read_alerts(stamp: float) -> pd.DataFrame:
 
 
 def get_alerts() -> pd.DataFrame:
-    return _read_alerts(_stamp("alerts.csv"))
+    df = _read_alerts(_stamp("alerts.csv"))
+    sites = _with_brand(_read_sites(_stamp("sites.csv")))
+    return df.merge(sites[["site_id", "brand"]], on="site_id", how="left")
 
 
 @st.cache_data(show_spinner=False)

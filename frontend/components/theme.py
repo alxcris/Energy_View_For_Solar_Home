@@ -146,6 +146,15 @@ h3 { font-size: 1.3rem !important; margin-top: .5rem; }
 .ev-badge.cool { background: var(--ev-cool-soft);    color: #0B6E87; }
 .ev-badge.mute { background: var(--ev-grid);         color: var(--ev-muted); }
 
+/* Inverter brand chip on the maintenance alert cards; one visible proof that
+   the fleet mixes Huawei, Fronius and SMA in one view. */
+.ev-brand {
+    display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px;
+    font-size: .74rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+    background: var(--ev-grid); color: var(--ev-muted); margin-left: 2px;
+    border: 1px solid rgba(0,0,0,.05);
+}
+
 /* ---------- KPI cards ---------- */
 .ev-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
                gap: 16px; margin: 6px 0 20px; }
