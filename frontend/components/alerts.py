@@ -16,6 +16,17 @@ from components.theme import badge
 from config import UI
 from services import store
 
+def _brand_badge(brand) -> str:
+    """Small chip with the inverter brand (empty when unknown).
+
+    Makes it obvious at a glance that the alert list mixes vendors
+    (Huawei, Fronius, SMA) in one view - the whole point of the platform.
+    """
+    if brand is None or (isinstance(brand, float) and pd.isna(brand)) or str(brand).strip() in ("", "nan"):
+        return ""
+    return f'<span class="ev-brand">{html.escape(str(brand))}</span>'
+
+
 SEVERITY = {
     "critical": (UI["danger"], "err", "Critical"),
     "warning": (UI["warn"], "warn", "Warning"),
@@ -41,7 +52,7 @@ def _row_html(row: pd.Series) -> str:
     return (
         f'<div class="ev-alert" style="--sev:{color}"><div style="flex:1">'
         f'<div class="ev-alert-h"><span class="ev-alert-t">{html.escape(str(row.get("site_name", "")))}'
-        f'</span>{state}<span class="ev-sec-c">{html.escape(kind)}</span></div>'
+        f'</span>{_brand_badge(row.get("brand"))}{state}<span class="ev-sec-c">{html.escape(kind)}</span></div>'
         f'<div class="ev-alert-b">{html.escape(str(row.get("message", "")))}</div>'
         f'<div class="ev-alert-m"><span>Detected <b>{detected}</b></span>'
         f'<span>Lost so far <b>{float(row.get("lost_kwh") or 0):.0f} kWh</b></span>'

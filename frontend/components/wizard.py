@@ -125,12 +125,24 @@ POOL_HOURS = ["2 h", "4 h", "6 h", "8 h or more"]
 POOL_SEASON = ["All year", "May to September", "Only in high summer"]
 EV_KM = ["under 20", "20-50", "50-100", "over 100", "Not sure"]
 EV_NOON = ["Usually yes", "Only at weekends", "Rarely"]
-EQUIPMENT = ["Solar panels", "Battery", "Electric car", "Second electric car",
-             "Charging station (wallbox)", "Heated pool", "Hot tub / jacuzzi", "Sauna",
-             "Heated greenhouse", "Heated driveway", "Wine cellar", "Large aquarium",
-             "Home cinema", "Terrace heaters", "Home lift", "Heat pump", "Air conditioning",
-             "Electric underfloor heating", "Electric water heater", "Smart meter",
-             "Smart plugs"]
+# Infrastructure (not a "consumer" on its own; shown only in step 1).
+INFRASTRUCTURE = ["Solar panels", "Battery", "Charging station (wallbox)",
+                  "Smart meter", "Smart plugs"]
+
+# How many of each big consumer the home has (ev, washer, dishwasher, dryer,
+# heat pump / AC, electric water heater). Count defaults to 1.
+COUNTABLE = {"ev", "washer", "dishwasher", "dryer", "heatpump", "boiler"}
+
+# Appliances offered in step 2's pills, in a sensible order. Drops "ev2" since
+# the "Second electric car" use case is now a count on "ev".
+_APPLIANCE_ORDER = [k for k in APPLIANCES if k != "ev2"]
+
+# Step 1's list = infrastructure + the same appliance labels used in step 2.
+# One source of truth, so step 1 and step 2 cannot disagree on a label.
+EQUIPMENT = INFRASTRUCTURE + [APPLIANCES[k] for k in _APPLIANCE_ORDER]
+
+# Reverse lookup: appliance label (as shown in step 1 and step 2) -> internal key.
+_LABEL_TO_KEY = {v: k for k, v in APPLIANCES.items()}
 
 
 def appliance_kwh(key: str, profile: dict) -> float:
@@ -145,12 +157,25 @@ def appliance_kwh(key: str, profile: dict) -> float:
     return base
 
 
+def appliance_count(key: str, profile: dict) -> int:
+    """How many of this appliance the home has. Default 1."""
+    try:
+        return max(1, int(profile.get("appliance_counts", {}).get(key, 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
 def monthly_saving(key: str, profile: dict, price_gap: float) -> float:
-    """Lei saved in a month the appliance is in use, running it on your own energy."""
+    """Lei saved in a month the appliance is in use, running it on your own energy.
+
+    Two electric cars or two washing machines save twice as much, so the stored
+    count multiplies the headline figure here.
+    """
     spec = APPLIANCE_PROFILE.get(key)
     if not spec or spec["shift"] <= 0:
         return 0.0
-    return appliance_kwh(key, profile) * spec["shift"] * spec["runs"] * price_gap
+    cnt = appliance_count(key, profile)
+    return appliance_kwh(key, profile) * spec["shift"] * spec["runs"] * price_gap * cnt
 
 
 def annual_saving(key: str, profile: dict, price_gap: float) -> float:
@@ -246,12 +271,44 @@ def run_wizard() -> None:
 
     elif p["step"] == 2:
         st.subheader("What are the big consumers in your home?")
-        st.caption("So we can tell you when they are cheapest to run. The big flexible ones "
-                   "- a pool, a car, a water heater - are where most of the money is.")
-        _seed("w_appliances", [APPLIANCES[k] for k in p.get("appliances", []) if k in APPLIANCES])
-        chosen = st.pills("Pick everything that applies:", list(APPLIANCES.values()),
-                          selection_mode="multi", key="w_appliances")
-        p["appliances"] = [k for k, v in APPLIANCES.items() if v in (chosen or [])]
+        st.caption("Only the ones you ticked on the previous step, plus the household "
+                   "basics everyone has. If several of the same, pick a number.")
+
+        # Only offer the appliances the user said they have on step 1. No
+        # extras, no "every home has a dishwasher" assumption: if the user
+        # does not have it, it does not appear here.
+        have_keys = [_LABEL_TO_KEY[label] for label in p.get("equipment") or []
+                     if label in _LABEL_TO_KEY]
+        offered_keys = list(dict.fromkeys(have_keys))
+        if not offered_keys:
+            st.info("You did not tick any consumers on the previous step. "
+                    "Go back and pick what you have, or skip this step.")
+            _nav()
+            return
+        offered_labels = [APPLIANCES[k] for k in offered_keys]
+
+        _seed("w_appliances", [APPLIANCES[k] for k in p.get("appliances", [])
+                               if k in APPLIANCES and APPLIANCES[k] in offered_labels])
+        chosen = st.pills("Pick everything that applies:", offered_labels,
+                          selection_mode="multi", key="w_appliances") or []
+        p["appliances"] = [k for k, v in APPLIANCES.items() if v in chosen]
+
+        # One stepper per countable appliance (cars, washers, dishwashers, etc.),
+        # so a home with two cars or two washing machines is modelled right.
+        counts = p.setdefault("appliance_counts", {})
+        countable_here = [k for k in p["appliances"] if k in COUNTABLE]
+        if countable_here:
+            st.caption("How many of each?")
+            cols = st.columns(min(len(countable_here), 3))
+            for i, k in enumerate(countable_here):
+                _seed(f"w_cnt_{k}", int(counts.get(k, 1)))
+                counts[k] = int(cols[i % len(cols)].number_input(
+                    APPLIANCES[k], min_value=1, max_value=10, step=1,
+                    key=f"w_cnt_{k}"))
+        # Drop counts for appliances no longer selected.
+        for k in list(counts):
+            if k not in p["appliances"]:
+                counts.pop(k, None)
 
     elif p["step"] == 3:
         shiftable = [a for a in p.get("appliances", []) if a in SHIFTABLE]
